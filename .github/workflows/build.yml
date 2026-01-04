@@ -681,7 +681,7 @@ jobs:
               ;;
           esac
         else
-               perl -i -0777 -pe 's/(.*)echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}"/$1echo "\${KERNELVERSION}\${file_localversion}\$g5a0ffb447c1d-ab13771415\${config_localversion}\${scm_version}"/s' ./common/scripts/setlocalversion
+               perl -i -0777 -pe 's/(.*)echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}"/$1echo "\${KERNELVERSION}\${file_localversion}\$--g5a0ffb447c1d-ab13771415\${config_localversion}\${scm_version}"/s' ./common/scripts/setlocalversion
         fi
 
                   # 如果你需要改构建时间,请把以下变量 CURRENT_TIME 修改为如下例子字符串,如:CURRENT_TIME="Sat Jun 07 06:29:29 UTC 2025"
