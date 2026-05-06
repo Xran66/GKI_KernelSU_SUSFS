@@ -395,6 +395,12 @@ jobs:
               fi
             fi
           fi
+
+          if [ -f fs/namespace.c.rej ]; then
+            echo "::group::❌ 补丁在 fs/namespace.c 出现 hunk FAILED，点击查看具体信息"
+            cat fs/namespace.c.rej
+            echo "::endgroup::"
+          fi
   
       - name: 应用新的HOOKS补丁
         run: |
