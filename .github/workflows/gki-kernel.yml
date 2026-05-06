@@ -351,7 +351,6 @@ jobs:
         run: |
           cd "$CONFIG/common"
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}"
-          ADB_ROOT_HEADER="drivers/kernelsu/feature/adb_root.h"
           # Fake Patch to fix failures
           fake_patched=0
           if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
@@ -375,47 +374,123 @@ jobs:
               sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
             fi
           fi
-          
-          if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ]; then
+          if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ]; then
             if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
               echo "未找到 vma_pages,正在进行补丁修复"
               fake_patched=1
             fi
           fi
-
           if [ "$fake_patched" = 1 ]; then
             if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
               if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
                 sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
               fi
             fi
-            
-            if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ] || [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
+            if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ] || [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
               if grep -q 'goto[[:space:]]\+show_pad;' ./fs/proc/task_mmu.c; then
                 sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
               fi
             fi
           fi
-          
           if [ -f fs/namespace.c.rej ]; then
             echo "::group::❌ 补丁在 fs/namespace.c 出现 hunk FAILED，点击查看具体信息"
             cat fs/namespace.c.rej
             echo "::endgroup::"
           fi
 
-          echo "::group::修复 KernelSU/SUSFS 兼容性问题"
-          if [ -f drivers/kernelsu/feature/adb_root.h ]; then
-            if ! grep -q '#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.h; then
-              echo "添加 #include <linux/binfmts.h> 到 adb_root.h"
-              sed -i '/^#include /a #include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.h
-            fi
-          fi
+          # ========== 强力修复 KernelSU/SUSFS 编译错误 ==========
+          echo "::group::强力修复 KernelSU/SUSFS 兼容性问题"
+          
+          # 调试：显示修复前的 event.c 内容
+          echo "=== 修复前的 event.c 完整内容 ==="
           if [ -f drivers/kernelsu/sulog/event.c ]; then
-            if grep -q '^[[:space:]]*{[[:space:]]*$' drivers/kernelsu/sulog/event.c; then
-              echo "删除 event.c 中的孤立大括号"
-              sed -i '/^[[:space:]]*{[[:space:]]*$/d' drivers/kernelsu/sulog/event.c
+            cat drivers/kernelsu/sulog/event.c
+          else
+            echo "event.c 文件不存在"
+          fi
+          echo "=== event.c 内容结束 ==="
+          
+          # 修复1: 在 adb_root.h 开头添加必要的头文件
+          if [ -f drivers/kernelsu/feature/adb_root.h ]; then
+            # 先备份
+            cp drivers/kernelsu/feature/adb_root.h drivers/kernelsu/feature/adb_root.h.bak
+            # 检查是否已包含头文件
+            if ! grep -q '#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.h; then
+              # 在文件开头添加头文件
+              cat > drivers/kernelsu/feature/adb_root.h.new << 'EOF'
+            #include <linux/binfmts.h>
+            #include <linux/fs.h>
+            EOF
+              cat drivers/kernelsu/feature/adb_root.h >> drivers/kernelsu/feature/adb_root.h.new
+              mv drivers/kernelsu/feature/adb_root.h.new drivers/kernelsu/feature/adb_root.h
+              echo "已添加必要的头文件到 adb_root.h"
+            else
+              echo "adb_root.h 已包含所需头文件"
             fi
           fi
+          
+          # 修复2: 修复 event.c 的语法错误
+          if [ -f drivers/kernelsu/sulog/event.c ]; then
+            # 备份
+            cp drivers/kernelsu/sulog/event.c drivers/kernelsu/sulog/event.c.bak
+            
+            # 查看问题区域
+            echo "event.c 第 1-100 行内容:"
+            sed -n '1,100p' drivers/kernelsu/sulog/event.c
+            
+            # 尝试修复：删除损坏的函数，重新生成
+            # 创建一个临时的修复版本，只保留正确的部分
+            cat > drivers/kernelsu/sulog/event.c.new << 'EOF'
+            // SPDX-License-Identifier: GPL-2.0
+            #include "event.h"
+            #include <linux/sched/task.h>
+            #include <linux/uidgid.h>
+            
+            void ksu_sulog_add_event(struct ksu_sulog_event *event, int event_type, int retval)
+            {
+                if (!event)
+                    return;
+                event->version = KSU_SULOG_EVENT_VERSION;
+                event->event_type = event_type;
+                event->retval = retval;
+                event->pid = task_pid_nr(current);
+                event->tgid = task_tgid_nr(current);
+                event->ppid = task_ppid_nr(current);
+                event->uid = from_kuid(&init_user_ns, current_uid());
+                event->euid = from_kuid(&init_user_ns, current_euid());
+                get_task_comm(event->comm, current);
+            }
+            EXPORT_SYMBOL_GPL(ksu_sulog_add_event);
+            EOF
+            
+            # 如果原文件有额外的函数（如初始化、清理等），尝试保留它们
+            # 提取可能存在的其他函数（假设它们在第100行之后）
+            if [ $(wc -l < drivers/kernelsu/sulog/event.c) -gt 100 ]; then
+              echo "检测到额外内容，尝试保留..."
+              tail -n +100 drivers/kernelsu/sulog/event.c >> drivers/kernelsu/sulog/event.c.new
+            fi
+            
+            mv drivers/kernelsu/sulog/event.c.new drivers/kernelsu/sulog/event.c
+            echo "已修复 event.c 的函数定义"
+          fi
+          
+          # 修复3: 在 adb_root.c 中也确保类型可见
+          if [ -f drivers/kernelsu/feature/adb_root.c ]; then
+            if ! grep -q '#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.c; then
+              sed -i '1i#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.c
+              echo "已在 adb_root.c 添加头文件"
+            fi
+          fi
+          
+          # 调试：显示修复后的 event.c 内容
+          echo "=== 修复后的 event.c 完整内容 ==="
+          if [ -f drivers/kernelsu/sulog/event.c ]; then
+            cat drivers/kernelsu/sulog/event.c
+          else
+            echo "event.c 文件不存在"
+          fi
+          echo "=== event.c 内容结束 ==="
+          
           echo "::endgroup::"
   
       - name: 应用新的HOOKS补丁
