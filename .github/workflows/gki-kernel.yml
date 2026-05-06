@@ -504,9 +504,11 @@ jobs:
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
           cd "$CONFIG/common"
           if [ "$KV1" -lt 6 ]; then
-            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" || true
+            curl -LSs https://raw.githubusercontent.com/Xran66/GKI_KernelSU_SUSFS/refs/heads/main/patches/unicode_bypass_fix_6.1-.patch -o unicode_bypass_fix_6.1+.patch
+            patch -p1 --forward < unicode_bypass_fix_6.1-.patch || true
           else
-            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1+.patch" || true
+            curl -LSs https://raw.githubusercontent.com/Xran66/GKI_KernelSU_SUSFS/refs/heads/main/patches/unicode_bypass_fix_6.1+.patch -o unicode_bypass_fix_6.1+.patch
+            patch -p1 --forward < unicode_bypass_fix_6.1+.patch || true
           fi
           
       - name: 添加SUSFS配置设置
