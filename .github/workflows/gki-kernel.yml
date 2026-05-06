@@ -348,59 +348,90 @@ jobs:
           fi
 
       - name: 一些修复补丁
-        run: |
-          cd "$CONFIG/common"
-          FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}"
-          # Fake Patch to fix failures
-          fake_patched=0
-          if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
-            if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-              echo "未找到 nr_subpages,正在进行补丁修复"
-              sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
-              fake_patched=1
-            fi
-            if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
-              echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
-              sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
-            fi
-          fi
-          if [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
-            if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-              echo "未找到 vma_pages，正在进行补丁修复"
-              fake_patched=1
-            fi
-            if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
-              echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
-              sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
-            fi
-          fi
-          
-          if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ]; then
-            if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-              echo "未找到 vma_pages,正在进行补丁修复"
-              fake_patched=1
-            fi
-          fi
+  run: |
+    cd "$CONFIG/common"
+    FORMATTED_BRANCH="android15-6.6"
+    # Fake Patch to fix failures
+    fake_patched=0
+    if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
+      if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+        echo "未找到 nr_subpages,正在进行补丁修复"
+        sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+        fake_patched=1
+      fi
+      if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+        echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
+        sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+      fi
+    fi
+    if [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
+      if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+        echo "未找到 vma_pages，正在进行补丁修复"
+        fake_patched=1
+      fi
+      if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+        echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
+        sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+      fi
+    fi
+    if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ]; then
+      if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+        echo "未找到 vma_pages,正在进行补丁修复"
+        fake_patched=1
+      fi
+    fi
+    if [ "$fake_patched" = 1 ]; then
+      if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
+        if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+          sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
+        fi
+      fi
+      if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ] || [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
+        if grep -q 'goto[[:space:]]\+show_pad;' ./fs/proc/task_mmu.c; then
+          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+        fi
+      fi
+    fi
+    if [ -f fs/namespace.c.rej ]; then
+      echo "::group::❌ 补丁在 fs/namespace.c 出现 hunk FAILED，点击查看具体信息"
+      cat fs/namespace.c.rej
+      echo "::endgroup::"
+    fi
 
-          if [ "$fake_patched" = 1 ]; then
-            if [ "$FORMATTED_BRANCH" = "android15-6.6" ]; then
-              if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-                sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
-              fi
-            fi
-            
-            if [ "$FORMATTED_BRANCH" = "android12-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.10" ] || [ "$FORMATTED_BRANCH" = "android13-5.15" ] || [ "$FORMATTED_BRANCH" = "android14-6.1" ]; then
-              if grep -q 'goto[[:space:]]\+show_pad;' ./fs/proc/task_mmu.c; then
-                sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-              fi
-            fi
-          fi
+    # ========== 新增：修复 KernelSU/SUSFS 编译错误 ==========
+    echo "::group::应用 KernelSU/SUSFS 兼容性修复"
+    # 修复1: adb_root.h 缺少 struct user_arg_ptr 定义
+    ADB_ROOT_HEADER="drivers/kernelsu/feature/adb_root.h"
+    if [ -f "$ADB_ROOT_HEADER" ]; then
+      if ! grep -q '#include <linux/binfmts.h>' "$ADB_ROOT_HEADER"; then
+        echo "正在添加 #include <linux/binfmts.h> 到 adb_root.h"
+        sed -i '/^#include /a #include <linux/binfmts.h>' "$ADB_ROOT_HEADER"
+      else
+        echo "adb_root.h 已包含所需头文件"
+      fi
+    else
+      echo "警告: 未找到 $ADB_ROOT_HEADER"
+    fi
 
-          if [ -f fs/namespace.c.rej ]; then
-            echo "::group::❌ 补丁在 fs/namespace.c 出现 hunk FAILED，点击查看具体信息"
-            cat fs/namespace.c.rej
-            echo "::endgroup::"
-          fi
+    # 修复2: event.c 中的孤立大括号
+    EVENT_C_FILE="drivers/kernelsu/sulog/event.c"
+    if [ -f "$EVENT_C_FILE" ]; then
+      # 先显示问题行附近的代码（便于调试）
+      echo "检查 $EVENT_C_FILE 第 290-305 行:"
+      sed -n '290,305p' "$EVENT_C_FILE" || true
+      # 删除单独一行的大括号
+      if grep -q '^[[:space:]]*{[[:space:]]*$' "$EVENT_C_FILE"; then
+        echo "发现孤立的大括号，正在删除..."
+        sed -i '/^[[:space:]]*{[[:space:]]*$/d' "$EVENT_C_FILE"
+        echo "已删除"
+      else
+        echo "未发现孤立的大括号"
+      fi
+    else
+      echo "警告: 未找到 $EVENT_C_FILE"
+    fi
+    echo "::endgroup::"
+    # ========== 修复结束 ==========
   
       - name: 应用新的HOOKS补丁
         run: |
