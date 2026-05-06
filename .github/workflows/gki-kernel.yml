@@ -497,7 +497,18 @@ jobs:
           CONFIG_FILE="$CONFIG/common/arch/arm64/configs/gki_defconfig"
           echo "Changing to configuration directory: $CONFIG_FILE..."
           echo "CONFIG_DEFAULT_BBR=y" >> "$CONFIG_FILE"
-           
+                 
+      - name: Apply UNICODE_BYPASS
+        if: ${{ inputs.UNICODE_BYPASS }}
+        run: |
+          PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
+          cd "$CONFIG/common"
+          if [ "$KV1" -lt 6 ]; then
+            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" || true
+          else
+            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1+.patch" || true
+          fi
+          
       - name: 添加SUSFS配置设置
         run: |
           echo "更改为配置目录: $CONFIG..."
