@@ -263,7 +263,7 @@ jobs:
             curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash $BRANCH
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "Adding KernelSU SukiSU..."
-            curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+            curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash $BRANCH
           fi
 
       - name: 添加 Baseband-guard 支持
@@ -398,43 +398,6 @@ jobs:
             echo "::endgroup::"
           fi
 
-          # ========== 最终修复方案：直接修改函数签名 ==========
-          echo "::group::最终修复 KernelSU/SUSFS 编译错误"
-          
-          # 修复1: 修改 adb_root.h，使用 void 指针避免类型问题
-          if [ -f drivers/kernelsu/feature/adb_root.h ]; then
-            echo "修改 adb_root.h 函数签名..."
-            # 将 struct user_arg_ptr * 改为 void *
-            sed -i 's/struct user_arg_ptr \*envp/void *envp/g' drivers/kernelsu/feature/adb_root.h
-            echo "已修改 adb_root.h"
-          fi
-          
-          # 修复2: 修改 adb_root.c 的函数签名以匹配
-          if [ -f drivers/kernelsu/feature/adb_root.c ]; then
-            echo "修改 adb_root.c 函数签名..."
-            sed -i 's/struct user_arg_ptr \*envp/void *envp/g' drivers/kernelsu/feature/adb_root.c
-            echo "已修改 adb_root.c"
-          fi
-          
-          # 修复3: 修改 sucompat.c 中的调用，添加类型转换
-          if [ -f drivers/kernelsu/feature/sucompat.c ]; then
-            echo "修改 sucompat.c 函数调用..."
-            # 添加 (void *) 类型转换
-            sed -i 's/ksu_adb_root_handle_execve(filename->name, envp_user)/ksu_adb_root_handle_execve(filename->name, (void *)envp_user)/g' drivers/kernelsu/feature/sucompat.c
-            echo "已修改 sucompat.c"
-          fi
-          
-          # 修复4: 处理 event.c 的孤立大括号
-          if [ -f drivers/kernelsu/sulog/event.c ]; then
-            echo "修复 event.c 语法错误..."
-            # 删除第 307 行附近的孤立大括号
-            sed -i '307d' drivers/kernelsu/sulog/event.c 2>/dev/null || true
-            # 或者删除所有单独成行的大括号
-            sed -i '/^[[:space:]]*{[[:space:]]*$/d' drivers/kernelsu/sulog/event.c
-            echo "已修复 event.c"
-          fi
-          
-          echo "::endgroup::"
   
       - name: 应用新的HOOKS补丁
         run: |
