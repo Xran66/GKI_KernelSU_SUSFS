@@ -398,53 +398,47 @@ jobs:
             echo "::endgroup::"
           fi
 
-          # ========== 强力修复 KernelSU/SUSFS 编译错误 ==========
-          echo "::group::强力修复 KernelSU/SUSFS 兼容性问题"
+          # ========== 修复 KernelSU/SUSFS 编译错误 ==========
+          echo "::group::修复 KernelSU/SUSFS 兼容性问题"
           
-          # 修复1: 在 adb_root.h 开头添加必要的头文件
+          # 修复1: 在 adb_root.h 添加头文件
           if [ -f drivers/kernelsu/feature/adb_root.h ]; then
-            echo "修复 adb_root.h..."
-            # 在文件开头添加头文件（如果还没有）
             if ! grep -q '#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.h; then
               sed -i '1i#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.h
-              echo "已添加 binfmts.h 到 adb_root.h"
+              echo "已修复 adb_root.h"
             fi
           fi
           
-          # 修复2: 修复 adb_root.c
+          # 修复2: 在 adb_root.c 添加头文件
           if [ -f drivers/kernelsu/feature/adb_root.c ]; then
-            echo "修复 adb_root.c..."
             if ! grep -q '#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.c; then
               sed -i '1i#include <linux/binfmts.h>' drivers/kernelsu/feature/adb_root.c
-              echo "已添加 binfmts.h 到 adb_root.c"
+              echo "已修复 adb_root.c"
             fi
           fi
           
-          # 修复3: 修复 event.c - 添加缺失的头文件
+          # 修复3: 在 event.c 开头添加必要的头文件
           if [ -f drivers/kernelsu/sulog/event.c ]; then
-            echo "修复 event.c..."
-            # 备份原文件
-            cp drivers/kernelsu/sulog/event.c drivers/kernelsu/sulog/event.c.bak
-            
-            # 在文件开头添加必要的头文件
-            cat > drivers/kernelsu/sulog/event.c.tmp << 'EOF'
-            // SPDX-License-Identifier: GPL-2.0
-            #include "event.h"
-            #include <linux/sched.h>
-            #include <linux/sched/task.h>
-            #include <linux/uidgid.h>
-            #include <linux/string.h>
-            #include <linux/slab.h>
-            #include <linux/err.h>
-            #include <linux/uaccess.h>
-            
-            EOF
-            
-            # 追加原文件内容（跳过可能存在的重复头文件）
-            tail -n +1 drivers/kernelsu/sulog/event.c.bak | grep -v "^#include" | head -n 500 >> drivers/kernelsu/sulog/event.c.tmp
-            
-            mv drivers/kernelsu/sulog/event.c.tmp drivers/kernelsu/sulog/event.c
-            echo "已添加必要的头文件到 event.c"
+            # 检查是否已有头文件
+            if ! grep -q '#include <linux/sched.h>' drivers/kernelsu/sulog/event.c; then
+              # 使用 printf 而不是 heredoc 来避免语法错误
+              printf '%s\n' '// SPDX-License-Identifier: GPL-2.0' > drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include "event.h"' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/sched.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/sched/task.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/uidgid.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/string.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/slab.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/err.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '#include <linux/uaccess.h>' >> drivers/kernelsu/sulog/event.c.new
+              printf '%s\n' '' >> drivers/kernelsu/sulog/event.c.new
+              # 追加原文件内容
+              cat drivers/kernelsu/sulog/event.c >> drivers/kernelsu/sulog/event.c.new
+              mv drivers/kernelsu/sulog/event.c.new drivers/kernelsu/sulog/event.c
+              echo "已修复 event.c - 添加头文件"
+            else
+              echo "event.c 已有头文件"
+            fi
           fi
           
           echo "::endgroup::"
