@@ -387,6 +387,11 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
             with open(config_file, "a") as f:
                 f.write("CONFIG_DEFAULT_BBR=y\n")
 
+        # arm64 必须保证 HAS_IOMEM=y。若配置碎片化导致其被关闭，
+        # ioremap/ioremap_prot 将无声明，新版 Clang 把隐式函数声明
+        # 当作硬错误，asm-offsets.s 会因此失败。
+        self._ensure_has_iomem(config_file)
+
         build_config = self.work_dir / "common/build.config.gki"
         if build_config.exists():
             with open(build_config, "r") as f:
@@ -394,6 +399,25 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
             content = content.replace("check_defconfig", "")
             with open(build_config, "w") as f:
                 f.write(content)
+
+    def _ensure_has_iomem(self, config_file: Path):
+        if not config_file.exists():
+            return
+        with open(config_file, "r") as f:
+            lines = f.readlines()
+        out = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("CONFIG_NO_IOMEM="):
+                continue
+            if stripped.startswith("CONFIG_HAS_IOMEM="):
+                continue
+            out.append(line)
+        out.append("CONFIG_HAS_IOMEM=y\n")
+        out.append("# CONFIG_NO_IOMEM is not set\n")
+        with open(config_file, "w") as f:
+            f.writelines(out)
+        logger.info("已强制 CONFIG_HAS_IOMEM=y 以避免 ioremap 隐式声明错误")
 
     def _configure_zram(self):
         config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
